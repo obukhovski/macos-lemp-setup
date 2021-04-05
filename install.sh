@@ -335,12 +335,12 @@ sudo echo "#
 
 [mysqld]
 innodb_log_file_size = 32M
-innodb_buffer_pool_size = 1024M
+innodb_buffer_pool_size = 2G
 innodb_log_buffer_size = 4M
 slow_query_log = 1
-query_cache_limit = 512K
-query_cache_size = 128M
-skip-name-resolve" > "/usr/local/etc/my.cnf"
+query_cache_limit = 2M
+query_cache_size = 512M
+#skip-name-resolve" > "/usr/local/etc/my.cnf"
 mkdir /usr/local/etc/my.cnf.d
 echo "${boldgreen}MySQL installed and running.${txtreset}"
 echo "${yellow}Restarting services....${txtreset}"
