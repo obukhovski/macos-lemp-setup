@@ -1,9 +1,11 @@
-## Install local LEMP for macOS
+## Install local LEMP for macOS, Magento 2 pack
 
-For *Front End development*, a full Vagrant box is not always needed. If you have a new Macbook Pro, you can install local LEMP (Linux, nginx, MariaDB and PHP) with this single liner below. Please see [installation steps](#installation-steps).
+Forked form [ronilaukkarinen](https://github.com/digitoimistodude/macos-lemp-setup)
+
+Install script contains LEMP components needed for PHP local development, Magento 2 included. If you have a Macbook, you can install local LEMP (Linux, nginx, MySQL and PHP) and elasticsearch with this single liner below. Please see [installation steps](#installation-steps).
 
 ```` bash
-wget -O - https://raw.githubusercontent.com/digitoimistodude/macos-lemp-setup/master/install.sh | bash
+wget -O - https://raw.githubusercontent.com/obukhovski/macos-lemp-setup/master/install.sh | bash
 ````
 
 **Please note:** Don't trust blindly to the script, use only if you know what you are doing. You can view the file [here](https://github.com/digitoimistodude/osx-lemp-setup/blob/master/install.sh) if having doubts what commands are being run. However, script is tested working many times and should be safe to run even if you have some or all of the components already installed.
@@ -22,12 +24,13 @@ wget -O - https://raw.githubusercontent.com/digitoimistodude/macos-lemp-setup/ma
 
 ### Background
 
-Read the full story by [@ronilaukkarinen](https://github.com/ronilaukkarinen): **[Moving from Vagrant to a LEMP stack directly on a Macbook Pro (for WordPress development)](https://medium.com/@rolle/moving-from-vagrant-to-a-lemp-stack-directly-on-a-macbook-pro-e935b1bc5a38)**
+The full installation description and further steps such as smile elastic suite, redis and mailhog setup could be found in: **[Magento 2 local developemnt on MacOS](https://obukhovski.com/magento-2-macos)** article.
 
 ### Features
-
-- PHP 7.2
-- nginx 1.19.2
+- PHP 7.4
+- MySQL 5.7
+- elasticsearch 7.12 (Apr 5th 2021)
+- nginx 1.19.8 (Apr 5th 2021)
 - Super lightweight
 - Native packages
 - Always on system service
@@ -38,48 +41,40 @@ Read the full story by [@ronilaukkarinen](https://github.com/ronilaukkarinen): *
 ### Requirements
 
 - [Homebrew](https://brew.sh/)
-- macOS, preferably 10.14.2 (Mojave)
+- macOS, preferably the last one (Big Sur)
 - wget
-- [mkcert](https://github.com/FiloSottile/mkcert)
+- [mkcert](https://github.com/FiloSottile/mkcert) (optional, for ssl support)
 
 ### Installation
 
+The scripts assumes there is a  ~/projects/ directory containing projects (sample-magento in the test case). Logs directory is ~/projects/log
+
 1. Install wget, `brew install wget`
-2. Run oneliner installation script `wget -O - https://raw.githubusercontent.com/digitoimistodude/macos-lemp-setup/master/install.sh | bash`
-3. Link PHP executable like this: **Run:** `sudo find / -name 'php'`. When you spot link that looks like this (yours might be different version) */usr/local/Cellar/php@7.2/7.2.24/bin/php*, symlink it to correct location to override MacOS's own file: `sudo ln -s /usr/local/Cellar/php@7.2/7.2.24/bin/php /usr/local/bin/php`
-4. Check the version with `php --version`, it should match the linked file.
-5. Brew should have already handled other links, you can test the correct versions with `sudo mysql --version` (if it's something like _mysql  Ver 15.1 Distrib 10.5.5-MariaDB, for osx10.15 (x86_64) using readline 5.1_ it's the correct one) and `sudo nginx -v` (if it's something like nginx version: nginx/1.19.3 it's the correct one)
-6. Add `export PATH="$(brew --prefix php@7.2)/bin:$PATH"` to .bash_profile (or to your zsh profile or to whatever term profile you are currently using)
-7. Run [Post install](#post-install)
-8. Enjoy! If you use [dudestack](https://github.com/digitoimistodude/dudestack), please check instructions from [its own repo](https://github.com/digitoimistodude/dudestack).
+2. Run oneliner installation script `wget -O - https://raw.obukhovski.com/digitoimistodude/macos-lemp-setup/master/install.sh | bash`
+3. Check the version with `php --version`, it should match the linked file. You might re-launch terminal in order to `brew link php@7.4` takes effect. 
+4. Brew should have already handled other links, you can test the correct versions with `mysql --version` (if it's something like _mysql  Ver 15.1 Distrib 10.5.5-MariaDB, for osx10.15 (x86_64) using readline 5.1_ it's the correct one) and `nginx -v` (if it's something like nginx version: nginx/1.19.3 it's the correct one)
+5. install ext-intl and ext-redis `pecl install intl && pecl install redis`. 
+6. Run [Post install](#post-install)
+7. Enjoy! If you use [dudestack](https://github.com/digitoimistodude/dudestack), please check instructions from [its own repo](https://github.com/digitoimistodude/dudestack).
 
 ### Post installations
 
-You may want to add your user and group correctly to `/usr/local/etc/php/7.2/php-fpm.d/www.conf` and set these to the bottom:
+Magento project example `cd ~/projects && composer create-project --repository-url=https://repo.magento.com magento/project-community-edition sample-magento`
+
+You should remember to add vhosts to your /etc/hosts file, for example: `127.0.0.1 sample-magento.local`.
+
+You may want to add your user and group correctly to `/usr/local/etc/php/7.4/php-fpm.d/www.conf` and set these to the bottom:
 
 ```` nginx
 catch_workers_output = yes
 php_flag[display_errors] = On
-php_admin_value[error_log] = /var/log/fpm7.2-php.www.log 
-slowlog = /var/log/fpm7.2-php.slow.log 
+php_admin_value[error_log] = /var/log/fpm7.4-php.www.log 
+slowlog = /var/log/fpm7.4-php.slow.log 
 php_admin_flag[log_errors] = On
 php_admin_value[memory_limit] = 1024M
 request_slowlog_timeout = 10
 php_admin_value[upload_max_filesize] = 100M
 php_admin_value[post_max_size] = 100M
-````
-
-Default vhost for your site (/etc/nginx/sites-enabled/sitename.test) could be something like:
-
-```` nginx
-server {
-    listen 80;
-    root /var/www/example;
-    index index.html index.htm index.php;
-    server_name example.test www.example.test;
-    include php7.conf;
-    include global/wordpress.conf;
-}
 ````
 
 Default my.cnf would be something like this (already added by install.sh in `/usr/local/etc/my.cnf`:
@@ -110,7 +105,7 @@ For mysql, <b>remember to run `sudo mysql_secure_installation`</b>, answer as su
 
 After that, get to know [dudestack](https://github.com/digitoimistodude/dudestack) to get everything up and running smoothly. Current version of dudestack supports macOS LEMP stack.
 
-You should remember to add vhosts to your /etc/hosts file, for example: `127.0.0.1 site.test`.
+If you face `Host '127.0.0.1' is not allowed to connect to this MySQL server` mysql connection error, either comment `skip-name-resolve` line in my.cnf or update host column for mysql user. Example of this: `UPDATE mysql.user SET host='%' WHERE user='root';`
 
 ### Use Linux-style aliases
 
@@ -125,15 +120,15 @@ brew services "$2" "$1";
 Now you are able to restart nginx and mysql unix style like this:
 
 ```` bash
-sudo service nginx restart
-sudo service mariadb restart
+service nginx restart
+service mysql@5.7 restart
 ````
 
 ### File sizes
 
-You might want to increase file sizes for development environment in case you need to test compression plugins and other stuff in WordPress. To do so, edit `/usr/local/etc/php/7.2/php-fpm.d/www.conf` and `/usr/local/etc/php/7.2/php.ini` and change all **memory_limit**, **post_max_size** and **upload_max_filesize** to something that is not so limited, for example **500M**.
+You might want to increase file sizes for development environment in case you need to test compression plugins and other stuff in WordPress. To do so, edit `/usr/local/etc/php/7.4/php-fpm.d/www.conf` and `/usr/local/etc/php/7.4/php.ini` and change all **memory_limit**, **post_max_size** and **upload_max_filesize** to something that is not so limited, for example **500M**.
 
-Please note, you also need to change **client_max_body_size** to the same amount in `/etc/nginx/nginx.conf`. After this, restart php-fpm with `sudo brew services restart php@7.2` and nginx with `sudo brew services restart nginx`.
+Please note, you also need to change **client_max_body_size** to the same amount in `/etc/nginx/nginx.conf`. After this, restart php-fpm with `brew services restart php@7.4` and nginx with `brew services restart nginx`.
 
 ### Certificates for localhost
 
@@ -182,49 +177,35 @@ server {
 }
 ````
 
-Test with `sudo nginx -t` and if everything is OK, restart nginx.
+Test with `nginx -t` and if everything is OK, restart nginx.
 
 ### XDebug
-
-1. Check your PHP version with `php --version`
-2. Search pecl `find -L "$(brew --prefix php@7.3)" -name pecl -o -name pear`
-3. Symlink pecl based on result, for example `sudo ln -s /usr/local/opt/php@7.3/bin/pecl /usr/local/bin/pecl`
-4. Add executable permissions `sudo chmod +x /usr/local/bin/pecl`
-5. Install xdebug `pecl install xdebug`
-6. Check `php --version`, it should display something like this:
+1. Install xdebug `pecl install xdebug`
+2. Check `php --version`, it should display something like this:
 
 ``` shell
 $ php --version
-PHP 7.3.21 (cli) (built: Aug  7 2020 18:56:36) ( NTS )
-Copyright (c) 1997-2018 The PHP Group
-Zend Engine v3.3.21, Copyright (c) 1998-2018 Zend Technologies
-    with Xdebug v3.0.3, Copyright (c) 2002-2021, by Derick Rethans
-    with Zend OPcache v7.3.21, Copyright (c) 1999-2018, by Zend Technologies
+PHP 7.4.16 (cli) (built: Aug  7 2020 18:56:36) ( NTS )
+Copyright (c) The PHP Group
+Zend Engine v3.3.21, Copyright (c) Zend Technologies
+    with Xdebug v3.0.3, Copyright (c), by Derick Rethans
+    with Zend OPcache v7.4.16, Copyright (c), by Zend Technologies
 ```
 
-7. Check where your php.ini file is with `php --ini`
-8. Edit php.ini, for example `sudo nano `
-9. Make sure these are on the first lines:
+3. Check where your php.ini file is with `php --ini`
+4. Edit php.ini, for example `sudo nano /usr/local/etc/php/7.4/php.ini`
+5. Make sure these are on the first lines:
 
 ```
 zend_extension="xdebug.so"
 xdebug.mode=debug
-xdebug.client_port=9003
-xdebug.client_host=127.0.0.1
-xdebug.remote_handler=dbgp
-xdebug.start_with_request=yes
-xdebug.discover_client_host=0
-xdebug.show_error_trace = 1
-xdebug.max_nesting_level=250
-xdebug.var_display_max_depth=10
-xdebug.log=/var/log/xdebug.log
 ```
 
-10. Save and close with <kbd>ctrl</kbd> + <kbd>O</kbd> and <kbd>ctrl</kbd> + <kbd>X</kbd>
-11. Make sure the log exists `sudo touch /var/log/xdebug.log && sudo chmod 777 /var/log/xdebug.log`
-12. Restart services (requires [Linux-style aliases](#use-linux-style-aliases)) `sudo service php@7.3 restart && sudo service nginx restart`
-13. Install [PHP Debug VSCode plugin](https://marketplace.visualstudio.com/items?itemName=felixfbecker.php-debug)
-14. Add following to launch.json (<kbd>cmd</kbd> + + <kbd>shift</kbd> + <kbd>P</kbd>, "Open launch.json"):
+The following steps are usually optional:
+
+6. Save and close with <kbd>ctrl</kbd> + <kbd>O</kbd> and <kbd>ctrl</kbd> + <kbd>X</kbd>
+7. Make sure the log exists `sudo touch /var/log/xdebug.log && sudo chmod 777 /var/log/xdebug.log`
+8. Restart services (requires [Linux-style aliases](#use-linux-style-aliases)) `service php@7.4 restart && service nginx restart`
 
 ``` json
 {
@@ -250,18 +231,18 @@ xdebug.log=/var/log/xdebug.log
   ]
 }
 ```
-15. Xdebug should now work on your editor
-16. PHPCS doesn't need xdebug but will warn about it not working... this causes error in [phpcs-vscode](https://marketplace.visualstudio.com/items?itemName=ikappas.phpcs) because it depends on outputted phpcs json that is not valid with the warning _"Xdebug: [Step Debug] Could not connect to debugging client. Tried: 127.0.0.1:9003 (through xdebug.client_host/xdebug.client_port) :-(_". This can be easily fixed by installing a bash "wrapper":
-17. Rename current phpcs with `sudo mv /usr/local/bin/phpcs /usr/local/bin/phpcs.bak`
-18. Install new with `sudo nano /usr/local/bin/phpcs`:
+9. Xdebug should now work on your editor
+10. PHPCS doesn't need xdebug but will warn about it not working... this causes error in [phpcs-vscode](https://marketplace.visualstudio.com/items?itemName=ikappas.phpcs) because it depends on outputted phpcs json that is not valid with the warning _"Xdebug: [Step Debug] Could not connect to debugging client. Tried: 127.0.0.1:9003 (through xdebug.client_host/xdebug.client_port) :-(_". This can be easily fixed by installing a bash "wrapper":
+11. Rename current phpcs with `sudo mv /usr/local/bin/phpcs /usr/local/bin/phpcs.bak`
+12. Install new with `sudo nano /usr/local/bin/phpcs`:
 
 ``` bash
 #!/bin/bash
 XDEBUG_MODE=off /Users/rolle/Projects/phpcs/bin/phpcs "$@"
 ```
 
-19. Add permissions `sudo chmod +x /usr/local/bin/phpcs`
-20. Make sure VSCode settings.json has this setting:
+14. Add permissions `sudo chmod +x /usr/local/bin/phpcs`
+15. Make sure VSCode settings.json has this setting:
 
 ``` json
 "phpcs.executablePath": "/usr/local/bin/phpcs",
