@@ -343,6 +343,10 @@ query_cache_size = 512M
 #skip-name-resolve" > "/usr/local/etc/my.cnf"
 mkdir /usr/local/etc/my.cnf.d
 echo "${boldgreen}MySQL installed and running.${txtreset}"
+echo "${yellow}Installing elasticsearch.${txtreset}"
+brew install elasticsearch
+brew services start elasticsearch
+echo "${boldgreen}elasticsearch installed and running.${txtreset}"
 echo "${yellow}Restarting services....${txtreset}"
 brew services stop nginx
 brew services start nginx
@@ -350,6 +354,8 @@ brew services stop php@7.4
 brew services start php@7.4
 brew services stop mysql@5.7
 brew services start mysql@5.7
+brew services stop elasticsearch
+brew services start elasticsearch
 brew link php@7.4
 brew link mysql@5.7
 brew services list
