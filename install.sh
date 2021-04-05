@@ -47,7 +47,10 @@ events {
         worker_connections 1024;
 }
 
-http {  
+http {
+        upstream fastcgi_backend {
+            server  127.0.0.1:9000;
+        }
 
         ##
         # Optimization
@@ -93,56 +96,210 @@ sudo touch /var/log/nginx/access.log
 sudo chmod 777 /var/log/nginx/access.log
 sudo touch /var/log/nginx/error.log
 sudo chmod 777 /var/log/nginx/error.log
-sudo echo "location ~ \.php\$ {
-  proxy_intercept_errors on;
-  try_files \$uri /index.php;
-  fastcgi_split_path_info ^(.+\.php)(/.+)\$;
-  include fastcgi_params;
-  fastcgi_read_timeout 300;
-  fastcgi_buffer_size 128k;
-  fastcgi_buffers 8 128k;
-  fastcgi_busy_buffers_size 128k;
-  fastcgi_temp_file_write_size 128k;
-  fastcgi_index index.php;
-  fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-  fastcgi_pass 127.0.0.1:9000;
-}" > "/etc/nginx/php7.conf"
-sudo echo "# WordPress single site rules.
-# Designed to be included in any server {} block.
-# Upstream to abstract backend connection(s) for php
-location = /favicon.ico {
-        log_not_found off;
-        access_log off;
+sudo echo "
+server {
+    listen 80;
+    listen [::]:80;
+    server_name sample-magento.local;
+    #set \$MAGE_ROOT /Users/$USER/projects/sample-magento;
+    include global/magento.conf;
+}" > "/etc/nginx/sites-available/sample-magento.conf"
+sudo echo "root \$MAGE_ROOT/pub;
+
+error_log /Users/$USER/projects/log/nginx-error.log;
+#access_log /Users/$USER/projects/log/nginx-access.log;
+
+index index.php;
+autoindex off;
+charset UTF-8;
+error_page 404 403 = /errors/404.php;
+
+# Deny access to sensitive files
+location /.user.ini {
+    deny all;
 }
 
-location = /robots.txt {
-        allow all;
-        log_not_found off;
-        access_log off;
+# PHP entry point for setup application
+location ~* ^/setup($|/) {
+    root \$MAGE_ROOT;
+    location ~ ^/setup/index.php {
+        fastcgi_pass   fastcgi_backend;
+
+        fastcgi_param  PHP_FLAG  \"session.auto_start=off \n suhosin.session.cryptua=off\";
+        fastcgi_param  PHP_VALUE \"memory_limit=756M \n max_execution_time=600\";
+        fastcgi_read_timeout 600s;
+        fastcgi_connect_timeout 600s;
+
+        fastcgi_index  index.php;
+        fastcgi_param  SCRIPT_FILENAME  \$document_root\$fastcgi_script_name;
+        include        fastcgi_params;
+    }
+
+    location ~ ^/setup/(?!pub/). {
+        deny all;
+    }
+
+    location ~ ^/setup/pub/ {
+        add_header X-Frame-Options \"SAMEORIGIN\";
+    }
+}
+
+# PHP entry point for update application
+location ~* ^/update($|/) {
+    root \$MAGE_ROOT;
+
+    location ~ ^/update/index.php {
+        fastcgi_split_path_info ^(/update/index.php)(/.+)$;
+        fastcgi_pass   fastcgi_backend;
+        fastcgi_index  index.php;
+        fastcgi_param  SCRIPT_FILENAME  \$document_root\$fastcgi_script_name;
+        fastcgi_param  PATH_INFO        \$fastcgi_path_info;
+        include        fastcgi_params;
+    }
+
+    # Deny everything but index.php
+    location ~ ^/update/(?!pub/). {
+        deny all;
+    }
+
+    location ~ ^/update/pub/ {
+        add_header X-Frame-Options \"SAMEORIGIN\";
+    }
 }
 
 location / {
-        # This is cool because no php is touched for static content.
-        # include the "?\$args" part so non-default permalinks doesn't break when using query string
-        try_files \$uri \$uri/ /index.php?\$args;
+    try_files \$uri \$uri/ /index.php\$is_args\$args;
 }
 
-# Add trailing slash to */wp-admin requests.
-rewrite /wp-admin\$ \$scheme://\$host\$uri/ permanent;
+location /pub/ {
+    location ~ ^/pub/media/(downloadable|customer|import|custom_options|theme_customization/.*\.xml) {
+        deny all;
+    }
+    alias \$MAGE_ROOT/pub/;
+    add_header X-Frame-Options \"SAMEORIGIN\";
+}
 
-# Directives to send expires headers and turn off 404 error logging.
-location ~* ^.+\.(ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf)\$ {
-       access_log off; log_not_found off; expires max;
-}" > "/etc/nginx/global/wordpress.conf"
-sudo echo "server {
-        listen 80 default_server;
-        root html;
-        index index.html index.htm index.php;
-        server_name localhost;
-        include php7.conf;
-        #include global/wordpress.conf;
-}" > "/etc/nginx/sites-available/default"
-sudo ln -sfnv /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+location /static/ {
+    # Uncomment the following line in production mode
+    # expires max;
+
+    # Remove signature of the static files that is used to overcome the browser cache
+    location ~ ^/static/version {
+        rewrite ^/static/(version\d*/)?(.*)$ /static/\$2 last;
+    }
+
+    location ~* \.(ico|jpg|jpeg|png|gif|svg|js|css|swf|eot|ttf|otf|woff|woff2|html|json)$ {
+        add_header Cache-Control \"public\";
+        add_header X-Frame-Options \"SAMEORIGIN\";
+        expires +1y;
+
+        if (!-f \$request_filename) {
+            rewrite ^/static/(version\d*/)?(.*)$ /static.php?resource=\$2 last;
+        }
+    }
+    location ~* \.(zip|gz|gzip|bz2|csv|xml)$ {
+        add_header Cache-Control \"no-store\";
+        add_header X-Frame-Options \"SAMEORIGIN\";
+        expires    off;
+
+        if (!-f \$request_filename) {
+           rewrite ^/static/(version\d*/)?(.*)$ /static.php?resource=\$2 last;
+        }
+    }
+    if (!-f \$request_filename) {
+        rewrite ^/static/(version\d*/)?(.*)$ /static.php?resource=\$2 last;
+    }
+    add_header X-Frame-Options \"SAMEORIGIN\";
+}
+
+location /media/ {
+    try_files \$uri \$uri/ /get.php\$is_args\$args;
+
+    location ~ ^/media/theme_customization/.*\.xml {
+        deny all;
+    }
+
+    location ~* \.(ico|jpg|jpeg|png|gif|svg|js|css|swf|eot|ttf|otf|woff|woff2)$ {
+        add_header Cache-Control \"public\";
+        add_header X-Frame-Options \"SAMEORIGIN\";
+        expires +1y;
+        try_files \$uri \$uri/ /get.php\$is_args\$args;
+    }
+    location ~* \.(zip|gz|gzip|bz2|csv|xml)$ {
+        add_header Cache-Control \"no-store\";
+        add_header X-Frame-Options \"SAMEORIGIN\";
+        expires    off;
+        try_files \$uri \$uri/ /get.php\$is_args\$args;
+    }
+    add_header X-Frame-Options \"SAMEORIGIN\";
+}
+
+location /media/customer/ {
+    deny all;
+}
+
+location /media/downloadable/ {
+    deny all;
+}
+
+location /media/import/ {
+    deny all;
+}
+location /media/custom_options/ {
+    deny all;
+}
+location /errors/ {
+    location ~* \.xml$ {
+        deny all;
+    }
+}
+
+# PHP entry point for main application
+location ~ ^/(index|get|static|errors/report|errors/404|errors/503|health_check)\.php$ {
+    try_files \$uri =404;
+    fastcgi_pass fastcgi_backend;
+    #fastcgi_buffers 1024 4k;
+
+    fastcgi_buffer_size 512k;
+    fastcgi_buffers 4 512k;
+    fastcgi_busy_buffers_size 1024k;
+
+    fastcgi_param  PHP_FLAG  \"session.auto_start=off \n suhosin.session.cryptua=off\";
+    fastcgi_param  PHP_VALUE \"memory_limit=756M \n max_execution_time=180\";
+    fastcgi_read_timeout 600s;
+    fastcgi_connect_timeout 600s;
+
+    fastcgi_index  index.php;
+    fastcgi_param  SCRIPT_FILENAME  \$document_root\$fastcgi_script_name;
+    include        fastcgi_params;
+}
+
+gzip on;
+gzip_disable \"msie6\";
+
+gzip_comp_level 6;
+gzip_min_length 1100;
+gzip_buffers 16 8k;
+gzip_proxied any;
+gzip_types
+    text/plain
+    text/css
+    text/js
+    text/xml
+    text/javascript
+    application/javascript
+    application/x-javascript
+    application/json
+    application/xml
+    application/xml+rss
+    image/svg+xml;
+gzip_vary on;
+
+# Banned locations (only reached if the earlier PHP entry point regexes dont match)
+location ~* (\.php$|\.phtml$|\.htaccess$|\.git) {
+    deny all;
+}" > "/etc/nginx/global/magento.conf"
+sudo ln -sfnv /etc/nginx/sites-available/sample-magento.conf /etc/nginx/sites-enabled/sample-magento.conf
 echo "${yellow}Installing PHP.${txtreset}"
 brew install php@7.4
 mkdir -p ~/Library/LaunchAgents
